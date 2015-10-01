@@ -134,18 +134,17 @@ mbVector3D mbChargeLattice::interpolateEdge(mbLatticePoint *pointA, mbLatticePoi
 	return returnVec;
 };
 
-mbVector3D mbChargeLattice::calcNormal(mbLatticePoint *point)
+mbVector3D mbChargeLattice::calcNormal(const mbVector3D point)
 {
 	int i;
 	mbVector3D returnVec = mbVector3D(0.0f, 0.0f, 0.0f);
 	mbVector3D intermediateVec;
-	float *position = point->position;
 	float charge, magnitude;
 	mbChargeNode *node;
 	for (i = 0; i < chargeNodes.size(); i++)
 	{
 		node = &chargeNodes[i];
-		intermediateVec = mbVector3D(position[0] - node->x, position[1] - node->y, position[2] - node->z);
+		intermediateVec = mbVector3D(point.x - node->x, point.y - node->y, point.z - node->z);
 		float magnitude = mbMagnitude(intermediateVec) / latticeMag;
 		charge = .5f * (1.0f / (magnitude * magnitude * magnitude)) * node->charge;
 		returnVec += (intermediateVec * charge);
@@ -153,10 +152,99 @@ mbVector3D mbChargeLattice::calcNormal(mbLatticePoint *point)
 	return returnVec.normalize();
 };
 
+bool mbChargeLattice::marchCube(mbLatticeCube *cube)
+{
+	int edgeCount, vertCount;
+	edgeCount = 0;
+	vertCount = 0;
+
+	int cubeIndex = 0;
+	mbLatticePoint **points = cube->points;
+
+	if (getChargeForPoint(points[0]) > isoLevel) { cubeIndex |= 1; }
+	if (getChargeForPoint(points[1]) > isoLevel) { cubeIndex |= 2; }
+	if (getChargeForPoint(points[2]) > isoLevel) { cubeIndex |= 4; }
+	if (getChargeForPoint(points[3]) > isoLevel) { cubeIndex |= 8; }
+	if (getChargeForPoint(points[4]) > isoLevel) { cubeIndex |= 16; }
+	if (getChargeForPoint(points[5]) > isoLevel) { cubeIndex |= 32; }
+	if (getChargeForPoint(points[6]) > isoLevel) { cubeIndex |= 64; }
+	if (getChargeForPoint(points[7]) > isoLevel) { cubeIndex |= 128; }
+
+	int edgeIndex = mbCubeEdgeFlags[cubeIndex];
+	edgeCount += edgeIndex;
+	if (edgeIndex != 0)
+	{
+		if ((edgeIndex & 1) > 0) { genEdge(cube, 0, 0, 1); }
+		if ((edgeIndex & 2) > 0) { genEdge(cube, 1, 1, 2); }
+		if ((edgeIndex & 4) > 0) { genEdge(cube, 2, 2, 3); }
+		if ((edgeIndex & 0x8) > 0) { genEdge(cube, 3, 3, 0); }
+		if ((edgeIndex & 0x10) > 0) { genEdge(cube, 4, 4, 5); }
+		if ((edgeIndex & 0x20) > 0) { genEdge(cube, 5, 5, 6); }
+		if ((edgeIndex & 0x40) > 0) { genEdge(cube, 6, 6, 7); }
+		if ((edgeIndex & 0x80) > 0) { genEdge(cube, 7, 7, 4); }
+		if ((edgeIndex & 0x100) > 0) { genEdge(cube, 8, 0, 4); }
+		if ((edgeIndex & 0x200) > 0) { genEdge(cube, 9, 1, 5); }
+		if ((edgeIndex & 0x400) > 0) { genEdge(cube, 10, 2, 6); }
+		if ((edgeIndex & 0x800) > 0) { genEdge(cube, 11, 3, 7); }
+
+		int triCount = 0;
+		int vertIndex;
+		mbLatticeEdge **edges = cube->edges;
+		while (mbTriangleConnectionTable[cubeIndex][triCount] != -1)
+		{
+			vertIndex = edges[mbTriangleConnectionTable[cubeIndex][triCount + 2]]->vertexIndex;
+			meshTriangles[triangleCount++] = vertIndex;
+			vertIndex = edges[mbTriangleConnectionTable[cubeIndex][triCount + 1]]->vertexIndex;
+			meshTriangles[triangleCount++] = vertIndex; 
+			vertIndex = edges[mbTriangleConnectionTable[cubeIndex][triCount]]->vertexIndex;
+			meshTriangles[triangleCount++] = vertIndex;
+			triCount += 3;
+		}
+
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+};
+
+void mbChargeLattice::recurseCube(mbLatticeCube *cube)
+{
+	mbLatticeCube *adjacentCube;
+	int xIndex, yIndex, zIndex;
+	int * const latticeLocation = cube->latticePosition;
+	xIndex = latticeLocation[0]; 
+	yIndex = latticeLocation[1];
+	zIndex = latticeLocation[2];
+	float axisCases[6][3] = {
+		{xIndex + 1, yIndex, zIndex},
+		{xIndex - 1, yIndex, zIndex},
+		{xIndex, yIndex + 1, zIndex},
+		{xIndex, yIndex - 1, zIndex},
+		{xIndex, yIndex, zIndex + 1},
+		{xIndex, yIndex, zIndex - 1},
+	};
+	float* currentCase;
+	int i;
+	// Test 6 axis cases.
+	for (i = 0; i < 6; i++)
+	{
+		currentCase = axisCases[i];
+		adjacentCube = getCube(currentCase[0], currentCase[1], currentCase[2]);
+		if (adjacentCube != NULL && adjacentCube->lastFrameVisited != currentFrame)
+		{
+			adjacentCube->lastFrameVisited = currentFrame;
+			if (marchCube(adjacentCube))
+				recurseCube(adjacentCube);
+		}
+	}
+}
+
 void mbChargeLattice::genEdge(mbLatticeCube *cube, int edgeIndex, int pointIndex, int pointIndex2)
 {
 	mbLatticeEdge *edge = cube->edges[edgeIndex];
-	mbVector3D interpolationResult;
+	mbVector3D interpolationResult, normalResult;
 	float *position = edge->position;
 	if (edge->lastFrameVisited != currentFrame)
 	{
@@ -166,12 +254,61 @@ void mbChargeLattice::genEdge(mbLatticeCube *cube, int edgeIndex, int pointIndex
 		position[1] = interpolationResult.y;
 		position[2] = interpolationResult.z;
 		edge->vertexIndex = vertexCount;
-		//newNormal[vertP] = calcNormal(v);
-		//newVertex[vertP++] = v;
+		normalResult = calcNormal(interpolationResult);
+		int realLocation = 3 * vertexCount;
+		meshNormals[realLocation] = normalResult.x;
+		meshVertices[realLocation] = interpolationResult.x;
+		meshNormals[realLocation+1] = normalResult.y;
+		meshVertices[realLocation+1] = interpolationResult.y;
+		meshNormals[realLocation+2] = normalResult.z;
+		meshVertices[realLocation+2] = interpolationResult.z;
+		vertexCount++;
+	}
+};
 
+void mbChargeLattice::doFrame() {
+	triangleCount = 0;
+	vertexCount = 0;
+	currentFrame++;
+	march();
+
+}
+
+void mbChargeLattice::march()
+{
+	int i, xIndex, yIndex, zIndex;
+	mbChargeNode *node;
+	mbLatticeCube *cube;
+	for (i = 0; i < chargeNodes.size(); i++)
+	{
+		node = &chargeNodes[i];
+		xIndex = (int)((node->x + .5f) * xDim);
+		yIndex = (int)((node->y + .5f) * yDim);
+		zIndex = (int)((node->z + .5f) * zDim);
+
+
+		while (zIndex >= 0)
+		{
+			cube = getCube(xIndex, yIndex, zIndex);
+			if (cube != NULL && cube->lastFrameVisited != currentFrame)
+			{
+				if (marchCube(cube))
+				{
+					recurseCube(cube);
+					zIndex--;
+				}
+				cube->lastFrameVisited = currentFrame;
+			}
+			else
+			{
+				zIndex = -1;
+			}
+			zIndex--;
+		}
 	}
 
-};
+
+}
 
 void mbChargeLattice::connectLatticeObjects() {
 	int cubeIndex = 0;
@@ -340,61 +477,3 @@ float* mbChargeLattice::getChargeLattice() {
 unsigned int mbChargeLattice::getLatticeSize() {
 	return xDim*yDim*zDim;
 }
-
-void mbChargeLattice::calculateCharge() {
-	unsigned int yOffset = xDim;
-	unsigned int zOffset = yOffset*(yDim);
-	unsigned int x, y, z;
-	int i;
-	float pwr;
-	int size = chargeNodes.size();
-	mbChargeNode node;
-	unsigned int location;
-	for (z = 0; z < zDim; z++)
-		for (y = 0; y < yDim; y++)
-			for (x = 0; x < xDim; x++)
-			{
-				pwr = 1.0f;
-				for (i = 0; i < size; i++)
-				{
-					pwr += 1.0f;
-				}
-				//chargeLattice[z*zOffset + y*yOffset + x] = chargeAtLatticePoint(x, y, z);
-				chargeLattice[z*zOffset + y*yOffset + x] = pwr;
-			}
-
-};
-
-float mbChargeLattice::getContributionToPointCharge(mbChargeNode node, float xLoc, float yLoc, float zLoc)
-{
-	mbVector3D posVec = mbVector3D(xLoc, yLoc, zLoc);
-	mbVector3D nodeVec = mbVector3D(node.x, node.y, node.z);
-	//We want to scale the magnitude to an interval of 0., 1., 
-	//latticeMag should be the maximum distance between 2 points in the lattice.
-	return getChargeScalar(mbSquaredMag((nodeVec - posVec) / latticeMag));
-
-}
-
-float mbChargeLattice::getChargeScalar(float magnitude) {
-	return 1.0f/magnitude;
-}
-
-inline float mbChargeLattice::chargeAtLatticePoint(unsigned int x, unsigned int y, unsigned int z) {
-	//const float xSpacing = xScale / xDim;
-	//const float ySpacing = yScale / yDim;
-	//const float zSpacing = zScale / zDim;
-	//const float xLoc = x*xSpacing - xScale / 2.0f;
-	//const float yLoc = y*ySpacing - yScale / 2.0f;
-	//const float zLoc = z*zSpacing - zScale / 2.0f;
-	//mbChargeNode node;
-	//float contribution;
-	//int i;
-	//float summedContributions = 0.0f;
-	//for (i = 0; i < getNodeCount(); i++)
-	//{
-	//	node = chargeNodes[i];
-	//	//contribution = getContributionToPointCharge(node, xLoc, yLoc, zLoc);
-	//	//summedContributions += node.charge;
-	//}
-	return 1.0f;
-};
