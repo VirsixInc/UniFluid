@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include "mbVector3D.h"
 
 struct mbChargeNode {
 	float x, y, z, charge;
@@ -33,15 +34,18 @@ public:
 	bool chargeAllocated = false;
 	float xScale, yScale, zScale;
 	float latticeMag;
+	float isoLevel = 0.5f;
+	int  vertexCount = 0;
 	unsigned int currentFrame;
 	float *chargeLattice = NULL;
 	mbLatticeEdge *latticeEdges = NULL;
 	mbLatticeCube *latticeCubes = NULL;
 	mbLatticePoint *latticePoints = NULL;
-	float* meshVertices = NULL;
-	float* meshNormals = NULL;
-	int* meshTriangles = NULL;
-	int pointCount, edgeCount, cubeCount, vertexCount;
+	float meshVertices[65535*3];
+	float meshNormals[65535*3];
+	int meshTriangles[65535*4];
+	int meshTriCount, meshVertCount;
+	int pointCount, edgeCount, cubeCount;
 	std::vector<mbChargeNode> chargeNodes;
 	mbChargeLattice(unsigned int xDimInit, unsigned int yDimInit,
 		unsigned int zDimInit, float xScaleInit, float yScaleInit, float zScaleInit);
@@ -68,5 +72,8 @@ private:
 	void mbChargeLattice::initalizeEdges();
 	void mbChargeLattice::initializeLattice();
 	void mbChargeLattice::initializeCubes();
-
+	void mbChargeLattice::genEdge(mbLatticeCube *cube, int edgeIndex, int pointIndex, int pointIndex2);
+	float mbChargeLattice::getChargeForPoint(mbLatticePoint *point);
+	mbVector3D mbChargeLattice::interpolateEdge(mbLatticePoint *pointA, mbLatticePoint *pointB, int axisIndex);
+	mbVector3D mbChargeLattice::calcNormal(mbLatticePoint *point);
 };

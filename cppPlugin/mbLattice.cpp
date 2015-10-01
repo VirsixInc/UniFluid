@@ -4,9 +4,9 @@
 #include "mbVector3D.h"
 #include "math.h"
 
-int X_AXIS = 0;
-int Y_AXIS = 1;
-int Z_AXIS = 2;
+const int X_AXIS = 0;
+const int Y_AXIS = 1;
+const int Z_AXIS = 2;
 
 mbChargeLattice::mbChargeLattice(unsigned int xDimInit, unsigned int yDimInit,
 	unsigned int zDimInit, float xScaleInit, float yScaleInit, float zScaleInit)
@@ -34,7 +34,7 @@ void mbChargeLattice::initializeLattice() {
 	initializePoints();
 	initializeCubes();
 	connectLatticeObjects();
-}
+};
 
 void mbChargeLattice::initalizeEdges() {
 	mbLatticeEdge* edgePointer = latticeEdges;
@@ -44,37 +44,41 @@ void mbChargeLattice::initalizeEdges() {
 		edgePointer->axis = -1;
 		edgePointer->lastFrameVisited = 0;
 	}
-}
+};
 
 void mbChargeLattice::initializePoints() {
 	mbLatticePoint* pointPointer = latticePoints;
+	int *latticeLocation;
+	float *position;
 	int iX, iY, iZ;
 	for (iX = 0; iX < xDim; iX++)
 		for (iY = 0; iY < yDim; iY++)
 			for (iZ = 0; iZ < zDim; iZ++)
 			{
-				pointPointer->latticeLocation[0] = iX;
-				pointPointer->latticeLocation[1] = iY;
-				pointPointer->latticeLocation[2] = iZ;
-				pointPointer->position[0] = (float(iX) / xDim) - .5f;
-				pointPointer->position[1] = (float(iY) / yDim) - .5f;
-				pointPointer->position[2] = (float(iZ) / zDim) - .5f;
+				latticeLocation = pointPointer->latticeLocation;
+				latticeLocation[0] = iX;
+				latticeLocation[1] = iY;
+				latticeLocation[2] = iZ;
+				position = pointPointer->position;
+				position[0] = (float(iX) / xDim) - .5f;
+				position[1] = (float(iY) / yDim) - .5f;
+				position[2] = (float(iZ) / zDim) - .5f;
 				pointPointer->lastFrameVisited = 0;
 				pointPointer++;
 			}
-}
+};
 
 mbLatticePoint* mbChargeLattice::getPoint(int x, int y, int z) {
 	if (x < 0 || y < 0 || z < 0 || x > xDim || y > yDim || z > zDim) 
 		return NULL;
 	return &latticePoints[z + (y * (zDim + 1)) + (x * (zDim + 1) * (yDim + 1))];
-}
+};
 
 mbLatticeCube* mbChargeLattice::getCube(int x, int y, int z) {
 	if (x < 0 || y < 0 || z < 0 || x >= xDim || y >= yDim || z >= zDim)
 		return NULL;
 	return &latticeCubes[z + (y * (zDim)) + (x * (zDim)* (yDim))];
-}
+};
 
 void mbChargeLattice::initializeCubes() {
 	mbLatticeCube* cubePointer = latticeCubes;
@@ -87,12 +91,92 @@ void mbChargeLattice::initializeCubes() {
 			cubePointer->edges[x] = NULL;
 		}
 	}
-}
+};
+
+float mbChargeLattice::getChargeForPoint(mbLatticePoint* point) 
+{
+	float charge;
+	int i;
+	mbChargeNode *node;
+	mbVector3D chargeVec, pointVec;
+	if (point->lastFrameVisited != currentFrame)
+	{
+		point->lastFrameVisited = currentFrame;
+		charge = 0.0f;
+		for (int i = 0; i < chargeNodes.size(); i++)
+		{
+			node = &chargeNodes[i];
+			chargeVec = mbVector3D(node->x, node->y, node->z);
+			pointVec = mbVector3D(point->position[0], point->position[1], point->position[2]);
+			float distance = mbSquaredMag(chargeVec - pointVec);
+			if (distance < 25.0f)
+				charge += (1.0f / distance)* node->charge;
+
+		}
+		point->charge = charge;
+	}
+	return point->charge;
+};
+
+mbVector3D mbChargeLattice::interpolateEdge(mbLatticePoint *pointA, mbLatticePoint *pointB, int axisIndex)
+{
+	float chargeAtA = getChargeForPoint(pointA);
+	float *position = pointA->position;
+	float multiplier = (isoLevel - chargeAtA) / (getChargeForPoint(pointB) - chargeAtA);
+	mbVector3D returnVec = mbVector3D(position[0], position[1], position[2]);
+	float interpolationOffset = position[axisIndex] + (multiplier * (pointB->position[axisIndex] - position[axisIndex]));
+	if (axisIndex == X_AXIS)
+		returnVec.x = interpolationOffset;
+	else if (axisIndex == Y_AXIS)
+		returnVec.y = interpolationOffset;
+	else
+		returnVec.z = interpolationOffset;
+	return returnVec;
+};
+
+mbVector3D mbChargeLattice::calcNormal(mbLatticePoint *point)
+{
+	int i;
+	mbVector3D returnVec = mbVector3D(0.0f, 0.0f, 0.0f);
+	mbVector3D intermediateVec;
+	float *position = point->position;
+	float charge, magnitude;
+	mbChargeNode *node;
+	for (i = 0; i < chargeNodes.size(); i++)
+	{
+		node = &chargeNodes[i];
+		intermediateVec = mbVector3D(position[0] - node->x, position[1] - node->y, position[2] - node->z);
+		float magnitude = mbMagnitude(intermediateVec) / latticeMag;
+		charge = .5f * (1.0f / (magnitude * magnitude * magnitude)) * node->charge;
+		returnVec += (intermediateVec * charge);
+	}
+	return returnVec.normalize();
+};
+
+void mbChargeLattice::genEdge(mbLatticeCube *cube, int edgeIndex, int pointIndex, int pointIndex2)
+{
+	mbLatticeEdge *edge = cube->edges[edgeIndex];
+	mbVector3D interpolationResult;
+	float *position = edge->position;
+	if (edge->lastFrameVisited != currentFrame)
+	{
+		edge->lastFrameVisited = currentFrame;
+		interpolationResult = interpolateEdge(cube->points[pointIndex], cube->points[pointIndex2], edge->axis);
+		position[0] = interpolationResult.x;
+		position[1] = interpolationResult.y;
+		position[2] = interpolationResult.z;
+		edge->vertexIndex = vertexCount;
+		//newNormal[vertP] = calcNormal(v);
+		//newVertex[vertP++] = v;
+
+	}
+
+};
 
 void mbChargeLattice::connectLatticeObjects() {
 	int cubeIndex = 0;
 	int edgeIndex = 0;
-	mbLatticeCube *cubePointer, *otherCube;
+	mbLatticeCube *cubePointer, *adjacentCube;
 	int* latticePosition;
 	mbLatticeEdge** edges;
 	mbLatticePoint** points;
@@ -123,38 +207,38 @@ void mbChargeLattice::connectLatticeObjects() {
 				edges[6]->axis = X_AXIS;
 				edges[10] = &latticeEdges[edgeIndex++];
 				edges[10]->axis = Z_AXIS;
-				otherCube = getCube(iX + 1, iY, iZ);
-				if (otherCube)
+				adjacentCube = getCube(iX + 1, iY, iZ);
+				if (adjacentCube)
 				{
-					otherCube->edges[11] = edges[10];
-					otherCube->edges[7] = edges[5];
+					adjacentCube->edges[11] = edges[10];
+					adjacentCube->edges[7] = edges[5];
 				}
-				otherCube = getCube(iX, iY + 1, iZ);
-				if (otherCube)
+				adjacentCube = getCube(iX, iY + 1, iZ);
+				if (adjacentCube)
 				{
-					otherCube->edges[4] = edges[6];
-					otherCube->edges[9] = edges[10];
+					adjacentCube->edges[4] = edges[6];
+					adjacentCube->edges[9] = edges[10];
 				}
-				otherCube = getCube(iX, iY + 1, iZ + 1);
-				if (otherCube)
+				adjacentCube = getCube(iX, iY + 1, iZ + 1);
+				if (adjacentCube)
 				{
-					otherCube->edges[0] = edges[6];
+					adjacentCube->edges[0] = edges[6];
 				}
-				otherCube = getCube(iX + 1, iY, iZ + 1);
-				if (otherCube)
+				adjacentCube = getCube(iX + 1, iY, iZ + 1);
+				if (adjacentCube)
 				{
-					otherCube->edges[3] = edges[5];
+					adjacentCube->edges[3] = edges[5];
 				}
-				otherCube = getCube(iX + 1, iY + 1, iZ);
-				if (otherCube)
+				adjacentCube = getCube(iX + 1, iY + 1, iZ);
+				if (adjacentCube)
 				{
-					otherCube->edges[8] = edges[10];
+					adjacentCube->edges[8] = edges[10];
 				}
-				otherCube = getCube(iX, iY, iZ + 1);
-				if (otherCube)
+				adjacentCube = getCube(iX, iY, iZ + 1);
+				if (adjacentCube)
 				{
-					otherCube->edges[1] = edges[5];
-					otherCube->edges[2] = edges[6];
+					adjacentCube->edges[1] = edges[5];
+					adjacentCube->edges[2] = edges[6];
 				}
 				if (!edges[0]) {
 					edges[0] = &latticeEdges[edgeIndex++];
