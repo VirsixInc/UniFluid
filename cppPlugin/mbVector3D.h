@@ -143,7 +143,7 @@ public:
 		return ((x != v.x) || (y != v.y) || (z != v.z));
 	}
 
-	mbVector3D& Normalize(void)
+	mbVector3D& normalize(void)
 	{
 		return (*this /= sqrtf(x * x + y * y + z * z));
 	}
