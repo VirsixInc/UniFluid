@@ -21,9 +21,9 @@ mbChargeLattice& getLatticeFromID(int latticeID) {
 	return (*mbLatticeHandler::getInstance().latticeMap[latticeID]);
 };
 
-void updateCharge(int latticeID) {
+void updateLattice(int latticeID) {
 	mbChargeLattice& lattice = getLatticeFromID(latticeID);
-	lattice.calculateCharge();
+	lattice.doFrame();
 };
 
 void setLatticeXDim(int latticeID, unsigned int xDim) {

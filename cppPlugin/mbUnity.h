@@ -18,7 +18,7 @@ extern "C" void DllExport deallocLatticeChargeReturn(int latticeID);
 extern "C" unsigned int DllExport getCurrentLatticeSize(int latticeID);
 extern "C" float DllExport *getChargeLattice(int latticeID);
 extern "C" void DllExport clearLatticeCharges(int latticeID);
-extern "C" void DllExport updateCharge(int latticeID);
+extern "C" void DllExport updateLattice(int latticeID);
 
 class mbLatticeHandler {
 public:
