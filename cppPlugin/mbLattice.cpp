@@ -3,6 +3,7 @@
 #include <vector>
 #include "mbVector3D.h"
 #include "math.h"
+#include <iostream>
 
 const int X_AXIS = 0;
 const int Y_AXIS = 1;
@@ -17,9 +18,9 @@ mbChargeLattice::mbChargeLattice(unsigned int xDimInit, unsigned int yDimInit,
 
 void mbChargeLattice::allocLattice() {
 	deallocLattice();
-	int cubeCount = xDim*yDim*zDim;
-	int pointCount = (xDim + 1)*(yDim + 1)*(zDim + 1);
-	int edgeCount = (cubeCount * 3) + ((2 * xDim * yDim) + (2 * xDim * zDim) + (2 * yDim * zDim)) + xDim + yDim + zDim; //Ideal Edge Count
+	cubeCount = xDim*yDim*zDim;
+	pointCount = (xDim + 1)*(yDim + 1)*(zDim + 1);
+	edgeCount = (cubeCount * 3) + ((2 * xDim * yDim) + (2 * xDim * zDim) + (2 * yDim * zDim)) + xDim + yDim + zDim; //Ideal Edge Count
 	edgeCount += ((xDim * yDim) + (yDim * zDim) + (zDim * xDim)) * 2; //Haven't combined the edges of the 0 index borders
 	chargeLattice = new float[xDim*yDim*zDim];
 	latticeCubes = new mbLatticeCube[cubeCount];
@@ -43,6 +44,10 @@ void mbChargeLattice::initalizeEdges() {
 	{
 		edgePointer->axis = -1;
 		edgePointer->lastFrameVisited = 0;
+		edgePointer->position[0] = 0.0f;
+		edgePointer->position[1] = 0.0f;
+		edgePointer->position[2] = 0.0f;
+
 	}
 };
 
@@ -51,9 +56,9 @@ void mbChargeLattice::initializePoints() {
 	int *latticeLocation;
 	float *position;
 	int iX, iY, iZ;
-	for (iX = 0; iX < xDim; iX++)
-		for (iY = 0; iY < yDim; iY++)
-			for (iZ = 0; iZ < zDim; iZ++)
+	for (iX = 0; iX < xDim+1; iX++)
+		for (iY = 0; iY < yDim+1; iY++)
+			for (iZ = 0; iZ < zDim+1; iZ++)
 			{
 				latticeLocation = pointPointer->latticeLocation;
 				latticeLocation[0] = iX;
@@ -109,11 +114,13 @@ float mbChargeLattice::getChargeForPoint(mbLatticePoint* point)
 			chargeVec = mbVector3D(node->x, node->y, node->z);
 			pointVec = mbVector3D(point->position[0], point->position[1], point->position[2]);
 			float distance = mbSquaredMag(chargeVec - pointVec);
+			//std::cout << "distance for point, node " << i << point->latticeLocation[0] << "," << point->latticeLocation[1] << "," << point->latticeLocation[2] << ":" << distance << std::endl;
 			if (distance < 25.0f)
-				charge += (1.0f / distance)* node->charge;
+				charge += (1.0f / distance) * node->charge;
 
 		}
 		point->charge = charge;
+		//std::cout << "charge for point " << point->latticeLocation[0] << "," << point->latticeLocation[1] << "," << point->latticeLocation[2] << ":" << point->charge << std::endl;
 	}
 	return point->charge;
 };
@@ -134,7 +141,7 @@ mbVector3D mbChargeLattice::interpolateEdge(mbLatticePoint *pointA, mbLatticePoi
 	return returnVec;
 };
 
-mbVector3D mbChargeLattice::calcNormal(const mbVector3D point)
+mbVector3D mbChargeLattice::calcNormal(mbVector3D point)
 {
 	int i;
 	mbVector3D returnVec = mbVector3D(0.0f, 0.0f, 0.0f);
@@ -145,7 +152,7 @@ mbVector3D mbChargeLattice::calcNormal(const mbVector3D point)
 	{
 		node = &chargeNodes[i];
 		intermediateVec = mbVector3D(point.x - node->x, point.y - node->y, point.z - node->z);
-		float magnitude = mbMagnitude(intermediateVec) / latticeMag;
+		float magnitude = mbMagnitude(intermediateVec);
 		charge = .5f * (1.0f / (magnitude * magnitude * magnitude)) * node->charge;
 		returnVec += (intermediateVec * charge);
 	}
@@ -170,6 +177,7 @@ bool mbChargeLattice::marchCube(mbLatticeCube *cube)
 	if (getChargeForPoint(points[6]) > isoLevel) { cubeIndex |= 64; }
 	if (getChargeForPoint(points[7]) > isoLevel) { cubeIndex |= 128; }
 
+	////std::cout << "cube Index " << cubeIndex << std::endl;
 	int edgeIndex = mbCubeEdgeFlags[cubeIndex];
 	edgeCount += edgeIndex;
 	if (edgeIndex != 0)
@@ -213,7 +221,7 @@ void mbChargeLattice::recurseCube(mbLatticeCube *cube)
 {
 	mbLatticeCube *adjacentCube;
 	int xIndex, yIndex, zIndex;
-	int * const latticeLocation = cube->latticePosition;
+	int *latticeLocation = cube->latticePosition;
 	xIndex = latticeLocation[0]; 
 	yIndex = latticeLocation[1];
 	zIndex = latticeLocation[2];
@@ -282,18 +290,22 @@ void mbChargeLattice::march()
 	for (i = 0; i < chargeNodes.size(); i++)
 	{
 		node = &chargeNodes[i];
+		//std::cout << "Searching node " << i << std::endl;
 		xIndex = (int)((node->x + .5f) * xDim);
 		yIndex = (int)((node->y + .5f) * yDim);
 		zIndex = (int)((node->z + .5f) * zDim);
-
+		//std::cout << xIndex << ',' << yIndex << ',' << zIndex << std::endl;
 
 		while (zIndex >= 0)
 		{
 			cube = getCube(xIndex, yIndex, zIndex);
+			//std::cout << "Cube is null " << (cube == NULL) << std::endl;
 			if (cube != NULL && cube->lastFrameVisited != currentFrame)
 			{
+				//std::cout << "marching cube" << xIndex << yIndex << zIndex << std::endl;
 				if (marchCube(cube))
 				{
+					//std::cout << "recursing cube" << xIndex << yIndex << zIndex << std::endl;
 					recurseCube(cube);
 					zIndex--;
 				}

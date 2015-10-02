@@ -19,6 +19,12 @@ extern "C" unsigned int DllExport getCurrentLatticeSize(int latticeID);
 extern "C" float DllExport *getChargeLattice(int latticeID);
 extern "C" void DllExport clearLatticeCharges(int latticeID);
 extern "C" void DllExport updateLattice(int latticeID);
+extern "C" int DllExport getLatticeFrameVertCount(int latticeID);
+extern "C" int DllExport getLatticeFrameTriCount(int latticeID);
+extern "C" float DllExport *getLatticeFrameVertices(int latticeID);
+extern "C" float DllExport *getLatticeFrameNormals(int latticeID);
+extern "C" int DllExport *getLatticeFrameTriangles(int latticeID);
+
 
 class mbLatticeHandler {
 public:

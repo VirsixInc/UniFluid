@@ -8,13 +8,11 @@
 
 int setupLattice(unsigned int xDim, unsigned int yDim, unsigned int zDim,
 	float xScale, float yScale, float zScale) {
-	mbLatticeHandler& latticeHandler = mbLatticeHandler::getInstance();
-	return latticeHandler.generateLattice(xDim, yDim, zDim, xScale, yScale, zScale);
+	return mbLatticeHandler::getInstance().generateLattice(xDim, yDim, zDim, xScale, yScale, zScale);
 };
 
 void removeLattice(int latticeID) {
-	mbLatticeHandler& latticeHandler = mbLatticeHandler::getInstance();
-	latticeHandler.removeLattice(latticeID);
+	mbLatticeHandler::getInstance().removeLattice(latticeID);
 };
 
 mbChargeLattice& getLatticeFromID(int latticeID) {
@@ -22,14 +20,33 @@ mbChargeLattice& getLatticeFromID(int latticeID) {
 };
 
 void updateLattice(int latticeID) {
-	mbChargeLattice& lattice = getLatticeFromID(latticeID);
-	lattice.doFrame();
+	getLatticeFromID(latticeID).doFrame();
 };
 
 void setLatticeXDim(int latticeID, unsigned int xDim) {
 	mbChargeLattice& lattice = getLatticeFromID(latticeID);
 	lattice.xDim = xDim;
 	lattice.allocLattice();
+};
+
+int getLatticeFrameVertCount(int latticeID) {
+	return getLatticeFromID(latticeID).vertexCount;
+};
+
+int getLatticeFrameTriCount(int latticeID) {
+	return getLatticeFromID(latticeID).triangleCount;
+};
+
+float* getLatticeFrameVertices(int latticeID) {
+	return getLatticeFromID(latticeID).meshVertices;
+};
+
+float* getLatticeFrameNormals(int latticeID) {
+	return getLatticeFromID(latticeID).meshNormals;
+};
+
+int* getLatticeFrameTriangles(int latticeID) {
+	return getLatticeFromID(latticeID).meshTriangles;
 };
 
 void setLatticeYDim(int latticeID, unsigned int yDim) {

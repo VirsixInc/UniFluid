@@ -34,10 +34,10 @@ public:
 	bool chargeAllocated = false;
 	float xScale, yScale, zScale;
 	float latticeMag;
-	float isoLevel = 0.5f;
-	int  vertexCount = 0;
-	int triangleCount = 0;
-	unsigned int currentFrame;
+	float isoLevel = 20.0f;
+	int  vertexCount;
+	int triangleCount;
+	unsigned int currentFrame = 0;
 	float *chargeLattice = NULL;
 	mbLatticeEdge *latticeEdges = NULL;
 	mbLatticeCube *latticeCubes = NULL;
@@ -45,7 +45,6 @@ public:
 	float meshVertices[65535*3];
 	float meshNormals[65535*3];
 	int meshTriangles[65535*4];
-	int meshTriCount, meshVertCount;
 	int pointCount, edgeCount, cubeCount;
 	std::vector<mbChargeNode> chargeNodes;
 	mbChargeLattice(unsigned int xDimInit, unsigned int yDimInit,
